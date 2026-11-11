@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>家相オーバーレイ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 図面ステージ(左)と操作パネル(右)の2カラム。狭い幅では図面が先の縦積み。
+   Color: 藍(accent)を基調に、朱(warn)は「三所に三備」の警告だけに使う。 */
+:root{
+  --bg:#f1f5f8; --surface:#ffffff; --fg:#17212a; --muted:#566673; --line:#d2dce4;
+  --accent:#27496d; --accent-fg:#ffffff; --warn:#b3321c; --warn-bg:#fbe8e4; --soft:#e4edf4;
+  color-scheme:light;
+  --font-display:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
+  --font-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e151b; --surface:#17212a; --fg:#e5ecf1; --muted:#9bacb9; --line:#2a3945;
+    --accent:#8db2d8; --accent-fg:#0e151b; --warn:#ff9580; --warn-bg:#3b2019; --soft:#1f2d39;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e151b; --surface:#17212a; --fg:#e5ecf1; --muted:#9bacb9; --line:#2a3945;
+  --accent:#8db2d8; --accent-fg:#0e151b; --warn:#ff9580; --warn-bg:#3b2019; --soft:#1f2d39;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--font-body); font-size:15px; line-height:1.7;
+  padding-block:24px 40px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap{max-width:1080px; margin:0 auto}
+h1{font-family:var(--font-display); font-weight:600; font-size:1.9rem; line-height:1.3; margin:0 0 6px; letter-spacing:.04em; text-wrap:balance}
+.lead{margin:0 0 20px; color:var(--muted); max-width:46em}
+.layout{display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start}
+@media (min-width:860px){
+  .layout{grid-template-columns:minmax(0,1fr) 360px}
+  .stagecol{position:sticky; top:12px}
+}
+.stage{background:var(--surface); border:1px solid var(--line); border-radius:6px; overflow:hidden; position:relative}
+.stage.drop{outline:3px dashed var(--accent); outline-offset:-3px}
+#cv{display:block; width:100%; touch-action:none; cursor:crosshair}
+.stage-note{margin:0; padding:8px 12px; font-size:.82rem; color:var(--muted); border-top:1px solid var(--line)}
+.panel{display:flex; flex-direction:column; min-width:0}
+.group{padding:14px 0; border-top:1px solid var(--line); min-width:0}
+.group:first-child{border-top:0; padding-top:0}
+h2{font-size:.78rem; font-weight:700; letter-spacing:.12em; color:var(--muted); margin:0 0 8px}
+.hint{margin:6px 0 0; font-size:.82rem; color:var(--muted); line-height:1.6}
+.row{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.seg{display:flex; flex-wrap:wrap; gap:6px}
+button{
+  font:inherit; font-size:.9rem; color:var(--fg); background:var(--surface);
+  border:1px solid var(--line); border-radius:4px; padding:6px 12px; cursor:pointer; min-height:36px;
+}
+button[aria-pressed="true"]{background:var(--accent); color:var(--accent-fg); border-color:var(--accent)}
+button.primary{background:var(--accent); color:var(--accent-fg); border-color:var(--accent); font-weight:700}
+button:hover{border-color:var(--accent)}
+button:focus-visible, input:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+input[type="file"]{font:inherit; font-size:.85rem; max-width:100%; color:var(--fg)}
+input[type="number"]{
+  font:inherit; width:5.2em; padding:5px 8px; color:var(--fg); background:var(--surface);
+  border:1px solid var(--line); border-radius:4px; font-variant-numeric:tabular-nums;
+}
+input[type="range"]{flex:1 1 140px; min-width:0; accent-color:var(--accent)}
+label{font-size:.88rem}
+.unit{font-size:.85rem; color:var(--muted); font-variant-numeric:tabular-nums}
+.status{margin:8px 0 0; font-size:.82rem; color:var(--muted); line-height:1.6}
+.summary{margin:0 0 8px; font-weight:700}
+.summary.warn{color:var(--warn)}
+ul.marks{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+ul.marks li{
+  display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center;
+  padding:6px 8px; border:1px solid var(--line); border-radius:4px; background:var(--surface);
+}
+ul.marks .name{font-weight:700}
+ul.marks .zone{display:block; font-size:.82rem; color:var(--muted); font-weight:400}
+.chip{font-size:.78rem; padding:2px 8px; border-radius:99px; background:var(--soft); color:var(--fg); white-space:nowrap}
+.chip.warn{background:var(--warn-bg); color:var(--warn); font-weight:700}
+ul.marks button{min-height:30px; padding:2px 9px}
+#prevWrap{margin-top:10px}
+#prev{display:block; max-width:100%; border:1px solid var(--line); border-radius:4px; background:#fff}
+.err{color:var(--warn); font-size:.85rem; margin:6px 0 0}
+.disclaimer{margin-top:20px; padding-top:14px; border-top:1px solid var(--line); font-size:.82rem; color:var(--muted); max-width:60em}
+.disclaimer p{margin:0 0 6px}
+.statusbar{display:flex; flex-wrap:wrap; gap:2px 12px; align-items:center; justify-content:space-between; margin:0; padding:6px 12px; border-top:1px solid var(--line); font-size:.85rem; min-height:34px}
+.statusbar .sum{font-weight:700}
+.statusbar .sum.warn{color:var(--warn)}
+.statusbar .tool{color:var(--muted); font-size:.82rem}
+.tabs{display:none}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chips button{min-height:34px; padding:3px 10px}
+.refbox{margin-top:10px; display:flex; flex-direction:column; gap:8px; min-width:0}
+.refbox h3{margin:0; font-size:1.05rem}
+.refbox p{margin:0}
+.refcard{border:1px solid var(--line); border-radius:4px; background:var(--surface); padding:8px 10px}
+.refcard .src{font-size:.78rem; font-weight:700; color:var(--muted); letter-spacing:.06em; margin-bottom:2px}
+.refcard.warnnote{background:var(--warn-bg); border-color:transparent}
+.caveat{margin:0 0 10px; padding:8px 10px; border-radius:4px; background:var(--soft); font-size:.85rem; line-height:1.6}
+ul.srcs{margin:10px 0 0; padding-left:1.2em; font-size:.82rem; color:var(--muted)}
+ul.srcs a{color:var(--accent); overflow-wrap:anywhere}
+.checkrow{display:flex; gap:8px; align-items:center; margin-bottom:8px}
+@media (max-width:859px){
+  body{padding-block:12px 28px}
+  h1{font-size:1.45rem}
+  .lead{font-size:.85rem; margin-bottom:12px}
+  .layout{display:block}
+  .stagecol{position:sticky; top:0; z-index:5; background:var(--bg); padding-bottom:8px; box-shadow:0 1px 0 var(--line)}
+  .tabs{display:flex; gap:6px; margin-top:8px; overflow-x:auto}
+  .tabs button{flex:0 0 auto; min-height:38px; padding:4px 5px; font-size:.85rem; white-space:nowrap}
+  .panel{margin-top:10px}
+  .panel .group{display:none; border-top:0; padding:10px 0 12px; border-bottom:1px solid var(--line)}
+  .panel[data-active="img"] .group[data-tab="img"],
+  .panel[data-active="dir"] .group[data-tab="dir"],
+  .panel[data-active="ctr"] .group[data-tab="ctr"],
+  .panel[data-active="put"] .group[data-tab="put"],
+  .panel[data-active="ref"] .group[data-tab="ref"],
+  .panel[data-active="save"] .group[data-tab="save"]{display:block}
+  .panel:not(.hints) .hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>家相オーバーレイ</h1>
+  <p class="lead">間取り図の画像に八方位を重ねて、鬼門・裏鬼門・家の中心にある玄関・トイレ・キッチンを確認します。画像はこのブラウザの中だけで処理し、外には送りません。</p>
+
+  <div class="layout">
+    <div class="stagecol">
+      <div class="stage" id="stage">
+        <canvas id="cv" aria-label="間取り図と八方位の重ね表示"></canvas>
+        <div class="statusbar" aria-live="polite"><span class="sum" id="sbSum"></span><span class="tool" id="sbTool"></span></div>
+      </div>
+      <div class="tabs" role="group" aria-label="設定の切り替え">
+        <button type="button" data-tab="img" aria-pressed="true">図面</button>
+        <button type="button" data-tab="dir" aria-pressed="false">方位</button>
+        <button type="button" data-tab="ctr" aria-pressed="false">中心</button>
+        <button type="button" data-tab="put" aria-pressed="false">配置</button>
+        <button type="button" data-tab="ref" aria-pressed="false">参考</button>
+        <button type="button" data-tab="save" aria-pressed="false">保存</button>
+        <button type="button" id="hintBtn" aria-pressed="false" style="margin-left:auto">説明</button>
+      </div>
+    </div>
+
+    <div class="panel" id="panel" data-active="img">
+      <div class="group" data-tab="img">
+        <h2>図面</h2>
+        <div class="row"><input type="file" id="file" accept="image/*" aria-label="間取り図の画像を選ぶ"></div>
+        <p class="hint">最初はサンプルの図面です。画像を図面の上にドラッグするか、コピーした画像を貼り付けて（Ctrl+V、または長押しして貼り付け）も読み込めます。家の中心は1階を基準に取るため、1階の平面図を使ってください。ご自身が利用できる図面だけをお使いください。</p>
+        <div class="row" style="margin-top:8px"><button type="button" id="btnSample">サンプルに戻す</button></div>
+        <p class="err" id="fileErr" hidden></p>
+      </div>
+
+      <div class="group" data-tab="dir">
+        <h2>図面の北</h2>
+        <div class="row">
+          <input type="range" id="north" min="-180" max="180" step="1" value="0" aria-label="図面の北の向き">
+          <input type="number" id="northNum" min="-180" max="180" step="1" value="0" aria-label="図面の北の向き（度）">
+          <span class="unit">度</span>
+        </div>
+        <p class="hint">図面の北矢印に合わせます。上が北なら0度。上から時計回りの角度です。</p>
+        <div class="seg" style="margin-top:10px" role="group" aria-label="回す対象">
+          <button type="button" id="rCompass" aria-pressed="true">方位盤を回す</button>
+          <button type="button" id="rPlan" aria-pressed="false">図面を回す（北が上）</button>
+        </div>
+        <div class="seg" style="margin-top:10px" role="group" aria-label="北の基準">
+          <button type="button" id="mTrue" aria-pressed="true">真北で判定</button>
+          <button type="button" id="mMag" aria-pressed="false">磁北で判定</button>
+        </div>
+        <div id="declRow" hidden>
+          <div class="row" style="margin-top:10px">
+            <label for="decl">偏角（西へ）</label>
+            <input type="number" id="decl" min="0" max="20" step="0.1" value="7">
+            <span class="unit">度</span>
+            <button type="button" id="pSap">札幌 約10</button>
+            <button type="button" id="pNaha">那覇 約6</button>
+          </div>
+          <p class="hint">日本では磁北が真北より西にずれます。値は地点と年で変わるので、国土地理院の値で確認してください。上の角度を真北の向きとして、磁北はそこから偏角の分だけ反時計回りにずらします。</p>
+        </div>
+      </div>
+
+      <div class="group" data-tab="dir">
+        <h2>方位の区切り</h2>
+        <div class="seg" role="group" aria-label="方位の区切り">
+          <button type="button" id="s45" aria-pressed="true">八方位 各45度</button>
+          <button type="button" id="s30" aria-pressed="false">九星気学式 東西南北30度・斜め60度</button>
+        </div>
+        <p class="hint">45度は一般的な家相の説明に沿った標準設定です。30度・60度は九星気学の方位の取り方で、家相の流派差ではありません。</p>
+      </div>
+
+      <div class="group" data-tab="ctr">
+        <h2>家の中心</h2>
+        <div class="seg">
+          <button type="button" id="aArea" class="primary">建物の面積の重心</button>
+          <button type="button" id="aBox">余白を除いた中心</button>
+        </div>
+        <p class="hint">家の中心は建物の重心とされます。ベランダ・ポーチ・ウッドデッキ・庭は建物に含めない扱いです。図面にこれらが描かれているときは、建物だけを四角で囲んでから計算してください。</p>
+        <div class="seg" style="margin-top:10px">
+          <button type="button" id="rgBtn" aria-pressed="false">対象範囲を囲む</button>
+          <button type="button" id="rgClear">範囲を解除</button>
+        </div>
+        <p class="status" id="autoMsg"></p>
+        <div class="row" style="margin-top:10px">
+          <label for="cr">中心の範囲</label>
+          <input type="range" id="cr" min="2" max="15" step="1" value="6" aria-label="中心の範囲">
+          <span class="unit" id="crVal">6%</span>
+        </div>
+        <p class="hint">範囲は図面の短い辺に対する割合です。点は図面の上でドラッグして直せます。</p>
+      </div>
+
+      <div class="group" data-tab="img">
+        <h2>拡大・移動</h2>
+        <div class="row">
+          <input type="range" id="zoom" min="1" max="6" step="0.1" value="1" aria-label="拡大率">
+          <span class="unit" id="zoomVal">×1.0</span>
+          <button type="button" id="zoomReset">全体表示</button>
+        </div>
+        <p class="hint">拡大したあと、何もない場所をドラッグすると動かせます。スマホは二本指で拡大できます。パソコンはCtrl（Macは⌘）を押しながらホイールでも拡大できます。</p>
+      </div>
+
+      <div class="group" data-tab="put">
+        <h2>設備を置く</h2>
+        <div class="seg" role="group" aria-label="置く設備">
+          <button type="button" data-type="gen" aria-pressed="false">玄関</button>
+          <button type="button" data-type="toi" aria-pressed="false">トイレ</button>
+          <button type="button" data-type="kit" aria-pressed="false">キッチン</button>
+        </div>
+        <p class="hint" id="placeHint">種類を選んでから、図面をタップして置きます。置いた印はドラッグで動かせます。</p>
+      </div>
+
+      <div class="group" data-tab="put" aria-live="polite">
+        <h2>判定</h2>
+        <p class="summary" id="summary"></p>
+        <ul class="marks" id="marks"></ul>
+      </div>
+
+      <div class="group" data-tab="ref">
+        <h2>方位ごとの参考情報</h2>
+        <p class="caveat">色や置くものは、出典の記事どうしで食い違います。ここでは2つの記事の内容を、出典ごとに並べています（流派名は、どちらの記事にも書かれていません）。娯楽・参考用です。</p>
+        <div class="chips" id="refChips" role="group" aria-label="方位を選ぶ"></div>
+        <div class="refbox" id="refBody" aria-live="polite"></div>
+        <ul class="srcs">
+          <li><a href="https://event.rakuten.co.jp/incentive/hikkoshi/fortune/2022/fengshui_bearing_color/" target="_blank" rel="noopener noreferrer">出典A: 楽天（引越し特集）の風水・方位と色の記事</a></li>
+          <li><a href="https://allabout.co.jp/gm/gc/460360/" target="_blank" rel="noopener noreferrer">出典B: All Aboutの風水・方位と色の記事</a></li>
+          <li><a href="https://www.athome.co.jp/contents/interior-style/kimon/" target="_blank" rel="noopener noreferrer">出典C: at homeの鬼門・裏鬼門の記事（鬼門の注意のみ）</a></li>
+        </ul>
+      </div>
+
+      <div class="group" data-tab="save">
+        <h2>保存</h2>
+        <label class="checkrow" for="incRef"><input type="checkbox" id="incRef"> 選んだ方位の参考情報も画像に入れる</label>
+        <div class="row"><button type="button" id="btnSave" class="primary">結果を画像で保存</button><button type="button" id="btnShare" hidden>共有メニューで保存</button></div>
+        <p class="status" id="saveMsg" hidden></p>
+        <p class="hint">図面、八方位、判定、設定をまとめたPNGを作ります。ダウンロードされないときは、下に出る画像を長押し（パソコンは右クリック）して保存してください。図面に他人の著作物が含まれる場合、共有には注意してください。</p>
+        <p class="err" id="saveErr" hidden></p>
+        <div id="prevWrap" hidden><img id="prev" alt="保存用の結果画像"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <p>判定は「三所（鬼門・裏鬼門・家の中心）に三備（玄関・トイレ・キッチン）を置かない」という一般的な説明だけです。張り・欠けの判定は未対応です。</p>
+    <p>家相は流派によって判断が異なり、効果が科学的に実証されたものではありません。娯楽・参考用です。必要に応じて書籍や専門家で確認してください。</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var NAMES = ['北','北東','東','南東','南','南西','西','北西'];
+  var TYPES = {gen:{label:'玄関',glyph:'玄'}, toi:{label:'トイレ',glyph:'ト'}, kit:{label:'キッチン',glyph:'キ'}};
+  var S = {
+    img:null, w:0, h:0, cx:0, cy:0,
+    north:0, mode:'true', decl:7, split:'45', rot:'compass', centerPct:6,
+    markers:[], placing:null, sample:true, nextId:1,
+    z:1, panX:0, panY:0,
+    region:null, regionTmp:null, regionMode:false,
+    refDir:null, noHl:false
+  };
+  var view = {cw:0, ch:0, dpr:1};
+  var cur = null;           // geometry of the last on-screen render
+  var drag = null, pinch = null, pointers = {}, tap = null;
+  var prevUrl = null, lastBlob = null;
+  var vhBase = window.innerHeight, lastW = window.innerWidth;
+
+  var $ = function(id){ return document.getElementById(id); };
+  var cv = $('cv'), ctx = cv.getContext('2d'), stage = $('stage');
+
+  /* ---------- directions ---------- */
+  function effNorth(){ return S.mode === 'mag' ? S.north - S.decl : S.north; }
+  function splitInfo(){
+    return S.split === '45'
+      ? {off:22.5, edges:[45,90,135,180,225,270,315,360]}
+      : {off:15, edges:[30,90,120,180,210,270,300,360]};
+  }
+  function sectorIndex(b){
+    var si = splitInfo();
+    var v = (((b + si.off) % 360) + 360) % 360;
+    for (var i = 0; i < 8; i++){ if (v < si.edges[i]) return i; }
+    return 0;
+  }
+  function centerRadius(){ return Math.min(S.w, S.h) * S.centerPct / 100; }
+  function bearingOf(x, y){
+    var phi = Math.atan2(x - S.cx, -(y - S.cy)) * 180 / Math.PI;
+    return (((phi - effNorth()) % 360) + 360) % 360;
+  }
+  function zoneOf(x, y){
+    if (Math.hypot(x - S.cx, y - S.cy) <= centerRadius()) return {center:true, idx:-1};
+    return {center:false, idx:sectorIndex(bearingOf(x, y))};
+  }
+  function isSansho(z){ return z.center || z.idx === 1 || z.idx === 5; }
+  function zoneLabel(z){
+    if (z.center) return '家の中心';
+    if (z.idx === 1) return '北東（鬼門）';
+    if (z.idx === 5) return '南西（裏鬼門）';
+    return NAMES[z.idx];
+  }
+  function rad(b){ return (b + effNorth() - 90) * Math.PI / 180; }
+
+  /* ---------- view geometry (rotation, zoom, pan) ---------- */
+  function rhoRad(){ return S.rot === 'plan' ? -effNorth() * Math.PI / 180 : 0; }
+  function geom(VW, VH, z, panX, panY){
+    var rho = rhoRad(), c = Math.abs(Math.cos(rho)), sn = Math.abs(Math.sin(rho));
+    var bw = S.w * c + S.h * sn, bh = S.w * sn + S.h * c;
+    var s0 = Math.min(VW / bw, VH / bh) * 0.97;
+    return {rho:rho, s:s0 * z, cxs:VW / 2 + panX, cys:VH / 2 + panY, VW:VW, VH:VH};
+  }
+  function toImg(sx, sy){
+    var g = cur, dx = sx - g.cxs, dy = sy - g.cys, cr = Math.cos(g.rho), sr = Math.sin(g.rho);
+    return {x:(dx * cr + dy * sr) / g.s + S.w / 2, y:(-dx * sr + dy * cr) / g.s + S.h / 2};
+  }
+
+  /* ---------- sample plan ---------- */
+  function makeSample(){
+    var c = document.createElement('canvas'); c.width = 900; c.height = 640;
+    var g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, 900, 640);
+    g.strokeStyle = '#2b3138'; g.lineWidth = 6; g.strokeRect(120, 90, 660, 460);
+    g.lineWidth = 2.5;
+    var rooms = [
+      ['台所',120,90,200,160], ['浴室',320,90,140,110], ['トイレ',640,90,140,110],
+      ['居間',120,250,260,300], ['和室',560,200,220,200], ['洋室',560,400,220,150], ['玄関',380,470,130,80]
+    ];
+    g.font = '20px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    rooms.forEach(function(r){
+      g.strokeRect(r[1], r[2], r[3], r[4]);
+      g.fillStyle = '#4a525a'; g.fillText(r[0], r[1] + r[3] / 2, r[2] + r[4] / 2);
+    });
+    g.fillStyle = '#8a929a'; g.font = '16px sans-serif'; g.textAlign = 'left';
+    g.fillText('サンプル図面', 24, 616);
+    return c;
+  }
+  function resetView(){ S.z = 1; S.panX = 0; S.panY = 0; }
+  function loadSample(){
+    S.img = makeSample(); S.w = 900; S.h = 640; S.cx = 450; S.cy = 320;
+    S.markers = [
+      {id:S.nextId++, type:'toi', x:710, y:145},
+      {id:S.nextId++, type:'gen', x:445, y:510},
+      {id:S.nextId++, type:'kit', x:220, y:170}
+    ];
+    S.sample = true; S.placing = null; S.region = null; S.regionTmp = null; S.regionMode = false;
+    resetView(); $('autoMsg').textContent = '';
+    sync();
+  }
+
+  /* ---------- rendering ---------- */
+  function layout(){
+    var W = stage.clientWidth;
+    if (!W || !S.img) return;
+    var small = window.matchMedia('(max-width:859px)').matches;
+    var maxH = small ? Math.max(180, Math.round(vhBase * 0.38)) : 620;
+    var ch = Math.max(small ? 160 : 240, Math.min(W * S.h / S.w, maxH));
+    var dpr = window.devicePixelRatio || 1;
+    cv.style.height = ch + 'px';
+    cv.width = Math.round(W * dpr); cv.height = Math.round(ch * dpr);
+    view = {cw:W, ch:ch, dpr:dpr};
+    draw();
+  }
+  function draw(){
+    if (!S.img || !view.cw) return;
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.clearRect(0, 0, view.cw, view.ch);
+    cur = render(ctx, view.cw, view.ch, S.z, S.panX, S.panY);
+  }
+
+  function render(g, VW, VH, z, panX, panY){
+    var G = geom(VW, VH, z, panX, panY), k = 1 / G.s, i, a0, a1;
+    var si = splitInfo(), R = Math.hypot(S.w, S.h) * 2, cx = S.cx, cy = S.cy;
+    function upright(x, y, fn){ g.save(); g.translate(x, y); g.rotate(-G.rho); fn(); g.restore(); }
+
+    g.save();
+    g.translate(G.cxs, G.cys); g.rotate(G.rho); g.scale(G.s, G.s); g.translate(-S.w / 2, -S.h / 2);
+    g.drawImage(S.img, 0, 0, S.w, S.h);
+    g.beginPath(); g.rect(0, 0, S.w, S.h); g.clip();
+
+    var rg = S.regionTmp || S.region;
+    if (rg){
+      g.beginPath(); g.rect(0, 0, S.w, S.h); g.rect(rg.x0, rg.y0, rg.x1 - rg.x0, rg.y1 - rg.y0);
+      g.fillStyle = 'rgba(16,26,36,0.30)'; g.fill('evenodd');
+      g.setLineDash([8 * k, 5 * k]); g.lineWidth = 2 * k; g.strokeStyle = '#27496d';
+      g.strokeRect(rg.x0, rg.y0, rg.x1 - rg.x0, rg.y1 - rg.y0); g.setLineDash([]);
+    }
+
+    for (i = 0; i < 8; i++){
+      a0 = i === 0 ? -si.off : si.edges[i - 1] - si.off;
+      a1 = si.edges[i] - si.off;
+      var fill = (i === 1 || i === 5) ? 'rgba(179,50,28,0.17)' : (i % 2 === 0 ? 'rgba(39,73,109,0.08)' : null);
+      if (!fill) continue;
+      g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, rad(a0), rad(a1)); g.closePath();
+      g.fillStyle = fill; g.fill();
+    }
+    if (!S.noHl && S.refDir !== null && S.refDir < 8){
+      a0 = S.refDir === 0 ? -si.off : si.edges[S.refDir - 1] - si.off;
+      a1 = si.edges[S.refDir] - si.off;
+      g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, rad(a0), rad(a1)); g.closePath();
+      g.fillStyle = 'rgba(224,160,0,0.22)'; g.fill();
+      g.strokeStyle = 'rgba(224,160,0,0.95)'; g.lineWidth = 3 * k; g.stroke();
+    }
+    for (i = 0; i < 8; i++){
+      var b = si.edges[i] - si.off;
+      g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + R * Math.cos(rad(b)), cy + R * Math.sin(rad(b)));
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 4 * k; g.stroke();
+      g.strokeStyle = '#27496d'; g.lineWidth = 1.5 * k; g.stroke();
+    }
+
+    g.beginPath(); g.arc(cx, cy, centerRadius(), 0, Math.PI * 2);
+    g.fillStyle = 'rgba(179,50,28,0.15)'; g.fill();
+    g.setLineDash([6 * k, 4 * k]); g.strokeStyle = '#b3321c'; g.lineWidth = 2 * k; g.stroke(); g.setLineDash([]);
+
+    var L = Math.min(S.w, S.h) * 0.4;
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+    for (i = 0; i < 8; i++){
+      a0 = i === 0 ? -si.off : si.edges[i - 1] - si.off;
+      a1 = si.edges[i] - si.off;
+      var mid = (a0 + a1) / 2, phi = (mid + effNorth()) * Math.PI / 180;
+      var lx = cx + L * Math.sin(phi), ly = cy - L * Math.cos(phi);
+      var hot = (i === 1 || i === 5), sub = i === 1 ? '鬼門' : (i === 5 ? '裏鬼門' : '');
+      (function(name, sub, hot){
+        upright(lx, ly, function(){
+          g.font = '700 ' + (16 * k) + 'px "Zen Kaku Gothic New", sans-serif';
+          g.lineWidth = 4 * k; g.strokeStyle = 'rgba(255,255,255,0.92)';
+          g.fillStyle = hot ? '#9c2a16' : '#1f3a56';
+          var ty = sub ? -8 * k : 0;
+          g.strokeText(name, 0, ty); g.fillText(name, 0, ty);
+          if (sub){
+            g.font = '500 ' + (12 * k) + 'px "Zen Kaku Gothic New", sans-serif';
+            g.strokeText(sub, 0, 9 * k); g.fillText(sub, 0, 9 * k);
+          }
+        });
+      })(NAMES[i], sub, hot);
+    }
+
+    S.markers.forEach(function(m){
+      var warn = isSansho(zoneOf(m.x, m.y));
+      upright(m.x, m.y, function(){
+        if (warn){
+          g.beginPath(); g.arc(0, 0, 16 * k, 0, Math.PI * 2);
+          g.strokeStyle = '#b3321c'; g.lineWidth = 2.5 * k; g.stroke();
+        }
+        g.beginPath(); g.arc(0, 0, 11 * k, 0, Math.PI * 2);
+        g.fillStyle = warn ? '#b3321c' : '#27496d'; g.fill();
+        g.lineWidth = 2 * k; g.strokeStyle = '#ffffff'; g.stroke();
+        g.fillStyle = '#ffffff'; g.font = '700 ' + (12 * k) + 'px "Zen Kaku Gothic New", sans-serif';
+        g.fillText(TYPES[m.type].glyph, 0, 0.5 * k);
+      });
+    });
+
+    upright(cx, cy, function(){
+      g.beginPath(); g.arc(0, 0, 9 * k, 0, Math.PI * 2);
+      g.fillStyle = '#27496d'; g.fill(); g.lineWidth = 2.5 * k; g.strokeStyle = '#ffffff'; g.stroke();
+      g.beginPath(); g.moveTo(-5 * k, 0); g.lineTo(5 * k, 0); g.moveTo(0, -5 * k); g.lineTo(0, 5 * k);
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5 * k; g.stroke();
+    });
+    g.restore();
+    return G;
+  }
+
+  /* ---------- automatic center ---------- */
+  function analyze(){
+    var k = Math.min(1, 480 / Math.max(S.w, S.h));
+    var sw = Math.max(1, Math.round(S.w * k)), sh = Math.max(1, Math.round(S.h * k));
+    var oc = document.createElement('canvas'); oc.width = sw; oc.height = sh;
+    var og = oc.getContext('2d', {willReadFrequently:true});
+    og.fillStyle = '#ffffff'; og.fillRect(0, 0, sw, sh); og.drawImage(S.img, 0, 0, sw, sh);
+    var x0 = 0, y0 = 0, x1 = sw, y1 = sh;
+    if (S.region){
+      x0 = Math.max(0, Math.floor(S.region.x0 * k)); y0 = Math.max(0, Math.floor(S.region.y0 * k));
+      x1 = Math.min(sw, Math.ceil(S.region.x1 * k)); y1 = Math.min(sh, Math.ceil(S.region.y1 * k));
+    }
+    var cw = x1 - x0, ch = y1 - y0;
+    if (cw < 10 || ch < 10) return null;
+    var data = og.getImageData(x0, y0, cw, ch).data;
+    var lum = new Float32Array(cw * ch), i, x, y;
+    for (i = 0; i < cw * ch; i++) lum[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    var ring = [];
+    for (x = 0; x < cw; x++){ ring.push(lum[x]); ring.push(lum[(ch - 1) * cw + x]); }
+    for (y = 0; y < ch; y++){ ring.push(lum[y * cw]); ring.push(lum[y * cw + cw - 1]); }
+    ring.sort(function(a, b){ return a - b; });
+    var bg = ring[ring.length >> 1];
+    var ink = new Uint8Array(cw * ch), n = 0;
+    for (i = 0; i < cw * ch; i++){ if (Math.abs(lum[i] - bg) > 45){ ink[i] = 1; n++; } }
+    return {k:k, x0:x0, y0:y0, cw:cw, ch:ch, ink:ink, n:n};
+  }
+
+  function centerBBox(a){
+    var colCnt = new Uint32Array(a.cw), rowCnt = new Uint32Array(a.ch), x, y;
+    for (y = 0; y < a.ch; y++) for (x = 0; x < a.cw; x++) if (a.ink[y * a.cw + x]){ colCnt[x]++; rowCnt[y]++; }
+    var lo = a.n * 0.005, hi = a.n * 0.995;
+    function span(cnt){
+      var cum = 0, s = -1, e = -1, i;
+      for (i = 0; i < cnt.length; i++){
+        cum += cnt[i];
+        if (s < 0 && cum > lo) s = i;
+        if (e < 0 && cum >= hi) e = i;
+      }
+      if (s < 0) s = 0; if (e < 0) e = cnt.length - 1;
+      return [s, e];
+    }
+    var sx = span(colCnt), sy = span(rowCnt);
+    return {x:(a.x0 + (sx[0] + sx[1] + 1) / 2) / a.k, y:(a.y0 + (sy[0] + sy[1] + 1) / 2) / a.k};
+  }
+
+  function dilate(src, w, h, r){
+    var tmp = new Uint8Array(w * h), out = new Uint8Array(w * h), pre = new Int32Array(Math.max(w, h) + 1), x, y;
+    for (y = 0; y < h; y++){
+      pre[0] = 0;
+      for (x = 0; x < w; x++) pre[x + 1] = pre[x] + src[y * w + x];
+      for (x = 0; x < w; x++){
+        var l = Math.max(0, x - r), rr = Math.min(w, x + r + 1);
+        tmp[y * w + x] = (pre[rr] - pre[l]) > 0 ? 1 : 0;
+      }
+    }
+    for (x = 0; x < w; x++){
+      pre[0] = 0;
+      for (y = 0; y < h; y++) pre[y + 1] = pre[y] + tmp[y * w + x];
+      for (y = 0; y < h; y++){
+        var t = Math.max(0, y - r), bt = Math.min(h, y + r + 1);
+        out[y * w + x] = (pre[bt] - pre[t]) > 0 ? 1 : 0;
+      }
+    }
+    return out;
+  }
+
+  function centerArea(a){
+    var w = a.cw, h = a.ch, N = w * h, r = Math.max(3, Math.round(Math.min(w, h) * 0.012));
+    var d = dilate(a.ink, w, h, r), ext = new Uint8Array(N), stack = new Int32Array(N), sp = 0, i, x, y;
+    function seed(p){ if (!d[p] && !ext[p]){ ext[p] = 1; stack[sp++] = p; } }
+    for (x = 0; x < w; x++){ seed(x); seed((h - 1) * w + x); }
+    for (y = 0; y < h; y++){ seed(y * w); seed(y * w + w - 1); }
+    while (sp > 0){
+      var p = stack[--sp], px = p % w, py = (p - px) / w;
+      if (px > 0) seed(p - 1);
+      if (px < w - 1) seed(p + 1);
+      if (py > 0) seed(p - w);
+      if (py < h - 1) seed(p + w);
+    }
+    var seen = new Uint8Array(N), queue = new Int32Array(N), best = null;
+    for (i = 0; i < N; i++){
+      if (ext[i] || seen[i]) continue;
+      var qh = 0, qt = 0, size = 0, sumX = 0, sumY = 0;
+      queue[qt++] = i; seen[i] = 1;
+      while (qh < qt){
+        var q = queue[qh++], qx = q % w, qy = (q - qx) / w;
+        size++; sumX += qx + 0.5; sumY += qy + 0.5;
+        var nb = [qx > 0 ? q - 1 : -1, qx < w - 1 ? q + 1 : -1, qy > 0 ? q - w : -1, qy < h - 1 ? q + w : -1];
+        for (var j = 0; j < 4; j++){
+          var m = nb[j];
+          if (m >= 0 && !ext[m] && !seen[m]){ seen[m] = 1; queue[qt++] = m; }
+        }
+      }
+      if (!best || size > best.size) best = {size:size, sx:sumX, sy:sumY};
+    }
+    if (!best) return null;
+    var frac = best.size / N;
+    if (frac < 0.04 || frac > 0.97) return null;
+    return {x:(a.x0 + best.sx / best.size) / a.k, y:(a.y0 + best.sy / best.size) / a.k};
+  }
+
+  function autoCenter(kind){
+    var msg = $('autoMsg');
+    if (!S.img) return;
+    var a = analyze();
+    if (!a || a.n < 30){ msg.textContent = '図面の線を見つけられませんでした。中心の点を手で動かしてください。'; return; }
+    var r = null, text = '';
+    if (kind === 'area'){
+      r = centerArea(a);
+      if (r) text = '建物の面積の重心に置きました。ベランダや庭が含まれていそうなときは、建物だけを囲んで再計算してください。';
+      else { r = centerBBox(a); text = '外壁がつながっていないようなので、余白を除いた範囲の中心にしました。必要なら点をドラッグして直してください。'; }
+    } else {
+      r = centerBBox(a); text = '余白を除いた範囲の中心に置きました。';
+    }
+    S.cx = Math.min(S.w, Math.max(0, r.x)); S.cy = Math.min(S.h, Math.max(0, r.y));
+    msg.textContent = text + (S.region ? '（対象範囲の中だけで計算）' : '');
+    draw(); renderResults();
+  }
+
+  /* ---------- results ---------- */
+  function renderResults(){
+    var ul = $('marks'), sum = $('summary');
+    ul.textContent = '';
+    var warnCount = 0;
+    S.markers.forEach(function(m){
+      var z = zoneOf(m.x, m.y), w = isSansho(z);
+      if (w) warnCount++;
+      var li = document.createElement('li');
+      var left = document.createElement('span'); left.className = 'name';
+      left.appendChild(document.createTextNode(TYPES[m.type].label));
+      var zn = document.createElement('span'); zn.className = 'zone'; zn.textContent = zoneLabel(z);
+      left.appendChild(zn);
+      var chip = document.createElement('span'); chip.className = 'chip' + (w ? ' warn' : '');
+      chip.textContent = w ? '三所に該当' : '該当なし';
+      var rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '削除';
+      rm.setAttribute('aria-label', TYPES[m.type].label + 'を削除');
+      rm.addEventListener('click', function(){
+        S.markers = S.markers.filter(function(x){ return x.id !== m.id; });
+        sync();
+      });
+      li.appendChild(left); li.appendChild(chip); li.appendChild(rm);
+      ul.appendChild(li);
+    });
+    if (!S.markers.length){ sum.className = 'summary'; sum.textContent = 'まだ何も置かれていません。'; }
+    else if (warnCount){ sum.className = 'summary warn'; sum.textContent = '三所に三備が入っているもの: ' + warnCount + '件'; }
+    else { sum.className = 'summary'; sum.textContent = '三所に三備は入っていません。'; }
+    var sb = $('sbSum'); sb.className = 'sum' + (warnCount ? ' warn' : ''); sb.textContent = sum.textContent;
+  }
+
+  /* ---------- UI sync ---------- */
+  function pressed(el, on){ el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  function clampNum(v, lo, hi){ v = parseFloat(v); if (isNaN(v)) return lo; return Math.min(hi, Math.max(lo, v)); }
+  function sync(){
+    $('north').value = S.north; $('northNum').value = S.north;
+    pressed($('mTrue'), S.mode === 'true'); pressed($('mMag'), S.mode === 'mag');
+    pressed($('rCompass'), S.rot === 'compass'); pressed($('rPlan'), S.rot === 'plan');
+    $('declRow').hidden = S.mode !== 'mag';
+    $('decl').value = S.decl;
+    pressed($('s45'), S.split === '45'); pressed($('s30'), S.split === '30');
+    $('cr').value = S.centerPct; $('crVal').textContent = S.centerPct + '%';
+    $('zoom').value = S.z; $('zoomVal').textContent = '×' + S.z.toFixed(1);
+    pressed($('rgBtn'), S.regionMode);
+    $('rgBtn').textContent = S.regionMode ? '図面の上でドラッグしてください' : '対象範囲を囲む';
+    $('rgClear').hidden = !S.region;
+    document.querySelectorAll('[data-type]').forEach(function(b){ pressed(b, S.placing === b.getAttribute('data-type')); });
+    $('placeHint').textContent = S.placing
+      ? TYPES[S.placing].label + 'を置く場所を図面でタップしてください。'
+      : '種類を選んでから、図面をタップして置きます。置いた印はドラッグで動かせます。';
+    $('sbTool').textContent = S.placing ? TYPES[S.placing].label + 'を置く場所をタップ'
+      : (S.regionMode ? '建物を囲むようにドラッグ' : (S.sample ? 'サンプル表示' : ''));
+    renderResults();
+    layout();
+  }
+
+  $('north').addEventListener('input', function(e){ S.north = clampNum(e.target.value, -180, 180); sync(); });
+  $('northNum').addEventListener('input', function(e){ S.north = clampNum(e.target.value, -180, 180); $('north').value = S.north; draw(); renderResults(); });
+  $('mTrue').addEventListener('click', function(){ S.mode = 'true'; sync(); });
+  $('mMag').addEventListener('click', function(){ S.mode = 'mag'; sync(); });
+  $('rCompass').addEventListener('click', function(){ S.rot = 'compass'; sync(); });
+  $('rPlan').addEventListener('click', function(){ S.rot = 'plan'; sync(); });
+  $('decl').addEventListener('input', function(e){ S.decl = clampNum(e.target.value, 0, 20); draw(); renderResults(); });
+  $('pSap').addEventListener('click', function(){ S.decl = 10; sync(); });
+  $('pNaha').addEventListener('click', function(){ S.decl = 6; sync(); });
+  $('s45').addEventListener('click', function(){ S.split = '45'; sync(); });
+  $('s30').addEventListener('click', function(){ S.split = '30'; sync(); });
+  $('cr').addEventListener('input', function(e){ S.centerPct = clampNum(e.target.value, 2, 15); sync(); });
+  $('aArea').addEventListener('click', function(){ autoCenter('area'); });
+  $('aBox').addEventListener('click', function(){ autoCenter('bbox'); });
+  $('rgBtn').addEventListener('click', function(){ S.regionMode = !S.regionMode; if (S.regionMode) S.placing = null; sync(); });
+  $('rgClear').addEventListener('click', function(){ S.region = null; S.regionTmp = null; S.regionMode = false; sync(); });
+  $('zoom').addEventListener('input', function(e){ setZoom(clampNum(e.target.value, 1, 6), view.cw / 2, view.ch / 2); });
+  $('zoomReset').addEventListener('click', function(){ resetView(); sync(); });
+  document.querySelectorAll('[data-type]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var t = b.getAttribute('data-type');
+      S.placing = S.placing === t ? null : t;
+      if (S.placing) S.regionMode = false;
+      sync();
+    });
+  });
+  $('btnSample').addEventListener('click', function(){ $('file').value = ''; $('fileErr').hidden = true; loadSample(); });
+
+  function setZoom(zn, px, py){
+    var zo = S.z, rx = px - view.cw / 2, ry = py - view.ch / 2;
+    S.panX = rx - (zn / zo) * (rx - S.panX);
+    S.panY = ry - (zn / zo) * (ry - S.panY);
+    S.z = zn;
+    if (zn <= 1.0001){ S.panX = 0; S.panY = 0; }
+    $('zoom').value = S.z; $('zoomVal').textContent = '×' + S.z.toFixed(1);
+    draw();
+  }
+
+  /* ---------- loading images: file, drop, paste ---------- */
+  function loadFile(f){
+    if (!f) return;
+    var err = $('fileErr'); err.hidden = true;
+    if (f.type && f.type.indexOf('image/') !== 0){ err.textContent = '画像ファイルを選んでください。'; err.hidden = false; return; }
+    var url = URL.createObjectURL(f), im = new Image();
+    im.onload = function(){
+      URL.revokeObjectURL(url);
+      if (!im.naturalWidth || !im.naturalHeight){ err.textContent = 'この画像の大きさを読み取れませんでした。PNG、JPEG、WebPで試してください。'; err.hidden = false; return; }
+      S.img = im; S.w = im.naturalWidth; S.h = im.naturalHeight;
+      S.cx = S.w / 2; S.cy = S.h / 2; S.markers = []; S.sample = false; S.placing = null;
+      S.region = null; S.regionTmp = null; S.regionMode = false; resetView();
+      sync();
+      autoCenter('area');
+    };
+    im.onerror = function(){
+      URL.revokeObjectURL(url);
+      err.textContent = 'この画像を読み込めませんでした。PNG、JPEG、WebPで試してください。'; err.hidden = false;
+    };
+    im.src = url;
+  }
+  $('file').addEventListener('change', function(){ loadFile($('file').files && $('file').files[0]); });
+  ['dragenter','dragover'].forEach(function(t){
+    stage.addEventListener(t, function(e){ e.preventDefault(); stage.classList.add('drop'); });
+  });
+  ['dragleave','drop'].forEach(function(t){
+    stage.addEventListener(t, function(e){ e.preventDefault(); stage.classList.remove('drop'); });
+  });
+  stage.addEventListener('drop', function(e){
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+  document.addEventListener('paste', function(e){
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++){
+      if (items[i].kind === 'file' && items[i].type.indexOf('image/') === 0){
+        var f = items[i].getAsFile();
+        if (f){ e.preventDefault(); loadFile(f); return; }
+      }
+    }
+  });
+
+  /* ---------- pointer interaction ---------- */
+  function local(e){ var r = cv.getBoundingClientRect(); return {sx:e.clientX - r.left, sy:e.clientY - r.top}; }
+  function near(p, x, y, px){ return Math.hypot(p.x - x, p.y - y) * cur.s <= px; }
+  function clampPt(p){ return {x:Math.min(S.w, Math.max(0, p.x)), y:Math.min(S.h, Math.max(0, p.y))}; }
+  function ptCount(){ return Object.keys(pointers).length; }
+
+  cv.addEventListener('pointerdown', function(e){
+    if (!cur) return;
+    var l = local(e);
+    pointers[e.pointerId] = {sx:l.sx, sy:l.sy};
+    tap = null;
+    if (ptCount() === 2){
+      var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+      pinch = {d0:Math.hypot(a.sx - b.sx, a.sy - b.sy) || 1, z0:S.z, panX0:S.panX, panY0:S.panY, mx0:(a.sx + b.sx) / 2, my0:(a.sy + b.sy) / 2};
+      drag = null; S.regionTmp = null;
+      return;
+    }
+    cv.setPointerCapture(e.pointerId);
+    var p = toImg(l.sx, l.sy), i;
+    for (i = S.markers.length - 1; i >= 0; i--){
+      if (near(p, S.markers[i].x, S.markers[i].y, 20)){ drag = {kind:'m', id:S.markers[i].id}; return; }
+    }
+    if (near(p, S.cx, S.cy, 20)){ drag = {kind:'c'}; return; }
+    if (S.regionMode){ var q = clampPt(p); drag = {kind:'r', x:q.x, y:q.y}; return; }
+    if (S.placing && p.x >= 0 && p.y >= 0 && p.x <= S.w && p.y <= S.h){
+      S.markers.push({id:S.nextId++, type:S.placing, x:p.x, y:p.y});
+      S.placing = null; sync(); return;
+    }
+    tap = {sx:l.sx, sy:l.sy};
+    if (S.z > 1.0001){ drag = {kind:'pan', sx:l.sx, sy:l.sy, panX:S.panX, panY:S.panY}; }
+  });
+
+  cv.addEventListener('pointermove', function(e){
+    if (!cur) return;
+    var l = local(e);
+    if (pointers[e.pointerId]){ pointers[e.pointerId] = {sx:l.sx, sy:l.sy}; }
+    if (pinch && ptCount() === 2){
+      var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+      var d = Math.hypot(a.sx - b.sx, a.sy - b.sy) || 1, mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
+      var zn = Math.min(6, Math.max(1, pinch.z0 * d / pinch.d0));
+      var rx = pinch.mx0 - view.cw / 2, ry = pinch.my0 - view.ch / 2;
+      S.panX = rx - (zn / pinch.z0) * (rx - pinch.panX0) + (mx - pinch.mx0);
+      S.panY = ry - (zn / pinch.z0) * (ry - pinch.panY0) + (my - pinch.my0);
+      S.z = zn;
+      if (zn <= 1.0001){ S.panX = 0; S.panY = 0; }
+      $('zoom').value = S.z; $('zoomVal').textContent = '×' + S.z.toFixed(1);
+      draw();
+      return;
+    }
+    if (!drag){
+      var p0 = toImg(l.sx, l.sy);
+      var over = near(p0, S.cx, S.cy, 20) || S.markers.some(function(m){ return near(p0, m.x, m.y, 20); });
+      cv.style.cursor = over ? 'grab' : (S.regionMode ? 'crosshair' : (S.placing ? 'copy' : (S.z > 1.0001 ? 'move' : 'crosshair')));
+      return;
+    }
+    if (drag.kind === 'pan'){
+      S.panX = drag.panX + (l.sx - drag.sx); S.panY = drag.panY + (l.sy - drag.sy);
+      draw(); return;
+    }
+    var q = clampPt(toImg(l.sx, l.sy));
+    if (drag.kind === 'c'){ S.cx = q.x; S.cy = q.y; }
+    else if (drag.kind === 'm'){
+      S.markers.forEach(function(m){ if (m.id === drag.id){ m.x = q.x; m.y = q.y; } });
+    } else if (drag.kind === 'r'){
+      S.regionTmp = {x0:Math.min(drag.x, q.x), y0:Math.min(drag.y, q.y), x1:Math.max(drag.x, q.x), y1:Math.max(drag.y, q.y)};
+    }
+    draw(); renderResults();
+  });
+
+  function endPointer(e){
+    delete pointers[e.pointerId];
+    if (pinch && ptCount() < 2){ pinch = null; drag = null; return; }
+    if (drag && drag.kind === 'r'){
+      var t = S.regionTmp; S.regionTmp = null; drag = null;
+      if (t && (t.x1 - t.x0) * cur.s > 24 && (t.y1 - t.y0) * cur.s > 24){
+        S.region = t; S.regionMode = false; sync(); autoCenter('area');
+      } else { draw(); }
+      return;
+    }
+    drag = null;
+    if (tap && e.type === 'pointerup' && cur){
+      var l2 = local(e);
+      if (Math.hypot(l2.sx - tap.sx, l2.sy - tap.sy) < 8){
+        var pt0 = toImg(l2.sx, l2.sy), zz = zoneOf(pt0.x, pt0.y);
+        setRef(zz.center ? 8 : zz.idx);
+        $('sbTool').textContent = '参考: ' + refName(S.refDir) + '（「参考」タブ）';
+      }
+    }
+    tap = null;
+  }
+  cv.addEventListener('pointerup', endPointer);
+  cv.addEventListener('pointercancel', endPointer);
+  cv.addEventListener('wheel', function(e){
+    if (!(e.ctrlKey || e.metaKey) || !cur) return;
+    e.preventDefault();
+    var l = local(e);
+    setZoom(Math.min(6, Math.max(1, S.z * Math.exp(-e.deltaY * 0.0015))), l.sx, l.sy);
+  }, {passive:false});
+
+  if (window.ResizeObserver){ new ResizeObserver(function(){ layout(); }).observe(stage); }
+  window.addEventListener('resize', function(){
+    if (window.innerWidth !== lastW){ lastW = window.innerWidth; vhBase = window.innerHeight; }
+    else { vhBase = Math.max(vhBase, window.innerHeight); }
+    layout();
+  });
+
+  /* ---------- tabs (phone) ---------- */
+  var panel = $('panel');
+  function setTab(t){
+    panel.setAttribute('data-active', t);
+    document.querySelectorAll('.tabs [data-tab]').forEach(function(b){ pressed(b, b.getAttribute('data-tab') === t); });
+  }
+  document.querySelectorAll('.tabs [data-tab]').forEach(function(b){
+    b.addEventListener('click', function(){ setTab(b.getAttribute('data-tab')); });
+  });
+  $('hintBtn').addEventListener('click', function(){
+    var on = !panel.classList.contains('hints');
+    panel.classList.toggle('hints', on); pressed($('hintBtn'), on);
+  });
+
+  /* ---------- reference info (出典つきの参考情報) ---------- */
+  // 0..7 は NAMES と同じ順、8 は中央。a=出典A（楽天）、b=出典B（All About）、k=出典C（at home）の鬼門の注意。
+  var REF = [
+    {el:'水', a:'ネイビーや黒。黒は重くなるので、暖色のカーテンで気の流れを補うとされる。財布・金庫・実印などの貴重品を置く方位とされ、重い家具は避ける。',
+         b:'女性向けにピンク、男性向けに水色。アイボリーを加えると上品にまとまるとされる。'},
+    {el:'土', a:'イエロー、ブラウン、ベージュ。差し色に赤。背の高い家具向きで、水場は不向きとされる。',
+         b:'白で気を整え、赤をポイントに添える。掃除や収納の見直しも勧めている。',
+         k:'トイレ・風呂などの水回りは勧められないとされる。ゴミ箱やゴミ置き場も避ける。対策として、とげのある植物、盛り塩、お札、念入りな掃除が挙げられている。'},
+    {el:'木', a:'グリーン、ブルー。オーディオやパソコンなどの情報機器や、上に伸びる観葉植物を置くとされる。',
+         b:'ブルー。女性向けには水色や赤も挙げている。'},
+    {el:'木', a:'グリーン（カーテンは薄い緑かオレンジ）。木や藤など自然素材の家具が合うとされる。',
+         b:'オレンジ。女性向けにパステルオレンジやミントグリーン、男性向けに濃いグリーンも挙げている。'},
+    {el:'火', a:'レッドやパープルを、全体ではなくアクセントとして。人の写真、光るもの、木製家具を置くとされる。',
+         b:'若葉のようなグリーンに、白かベージュを合わせる。'},
+    {el:'土', a:'イエロー、ベージュ、ブラウン。背の低い安定した家具や、陶器など土の性質のものを置くとされる。',
+         b:'若草色かパステルイエロー。ベージュや白との組み合わせも挙げている。',
+         k:'キッチンは避けるとされる。対策は北東と同じで、とげのある植物、盛り塩、お札、念入りな掃除が挙げられている。'},
+    {el:'金', a:'黄色とピンク。白、シルバー、金も基本色とされる。西日は遮光カーテンで防ぐ。',
+         b:'ピンク。パステルイエローや白と合わせる。花を飾る方法も挙げている。'},
+    {el:'金', a:'ゴールドやシルバー（カーテンはベージュ、クリーム、淡いピンク）。神棚やお札を置く方位とされ、水場は避ける。',
+         b:'クリーム色。ピンクやベージュと組み合わせる。'},
+    {el:'土（出典Bのみ）', a:null,
+         b:'淡い紫（ラベンダーなど）。アイボリーと合わせる。濃い紫は多用しない。'}
+  ];
+  var KIMON_COMMON = '同じ記事は、鬼門の範囲や判断が流派によって異なること、現代は冷蔵庫・換気・断熱で対応できるので、こだわりすぎなくてよいことも述べている。';
+  function refName(i){ return i === 8 ? '中央' : (i === 1 ? '北東（鬼門）' : (i === 5 ? '南西（裏鬼門）' : NAMES[i])); }
+  function mk(tag, cls, text){ var n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+  function refCard(src, text, cls){
+    var c = mk('div', 'refcard' + (cls ? ' ' + cls : ''));
+    c.appendChild(mk('div', 'src', src));
+    c.appendChild(mk('p', '', text));
+    return c;
+  }
+  function renderRef(){
+    var chips = $('refChips'), box = $('refBody'), i;
+    if (!chips.childNodes.length){
+      for (i = 0; i < 9; i++){
+        (function(i){
+          var b = mk('button', '', i === 8 ? '中央' : NAMES[i]); b.type = 'button'; b.setAttribute('data-ref', i);
+          b.addEventListener('click', function(){ setRef(i); });
+          chips.appendChild(b);
+        })(i);
+      }
+    }
+    for (i = 0; i < chips.childNodes.length; i++) pressed(chips.childNodes[i], S.refDir === i);
+    box.textContent = '';
+    if (S.refDir === null){
+      box.appendChild(mk('p', 'status', '方位のボタンを押すか、図面の方位をタップすると、その方位の参考情報が出ます。'));
+      return;
+    }
+    var r = REF[S.refDir];
+    box.appendChild(mk('h3', '', refName(S.refDir)));
+    box.appendChild(mk('p', 'status', '五行: ' + r.el + (S.refDir === 8 ? '' : '（出典AとBで一致）')));
+    box.appendChild(refCard('出典A（楽天）', r.a || 'この出典には記載がありません。'));
+    box.appendChild(refCard('出典B（All About）', r.b));
+    if (r.k){
+      box.appendChild(refCard('鬼門・裏鬼門の注意（出典C: at home）', r.k + ' ' + KIMON_COMMON, 'warnnote'));
+    }
+  }
+  function setRef(i){ S.refDir = i; renderRef(); draw(); }
+  function refLines(){
+    if (S.refDir === null) return [];
+    var r = REF[S.refDir], out = [];
+    out.push({t:'参考: ' + refName(S.refDir) + '　五行: ' + r.el, b:true});
+    out.push({t:'出典A（楽天）: ' + (r.a || '記載なし')});
+    out.push({t:'出典B（All About）: ' + r.b});
+    if (r.k) out.push({t:'鬼門の注意（出典C: at home）: ' + r.k});
+    out.push({t:'色や置くものは出典どうしで食い違います。流派名は出典に書かれていません。', small:true});
+    return out;
+  }
+
+  /* ---------- save as PNG ---------- */
+  function wrapText(g, text, maxW){
+    var out = [], line = '', i;
+    for (i = 0; i < text.length; i++){
+      var t = line + text.charAt(i);
+      if (g.measureText(t).width > maxW && line){ out.push(line); line = text.charAt(i); } else line = t;
+    }
+    if (line) out.push(line);
+    return out;
+  }
+  function exportPng(){
+    var err = $('saveErr'); err.hidden = true;
+    if (!S.img) return;
+    var EW = Math.min(1600, Math.max(900, S.w));
+    var rho = rhoRad(), c = Math.abs(Math.cos(rho)), sn = Math.abs(Math.sin(rho));
+    var bw = S.w * c + S.h * sn, bh = S.w * sn + S.h * c, EH = Math.round(EW * bh / bw);
+    var fs = Math.max(15, Math.round(EW / 58)), pad = Math.round(fs * 1.1), lh = Math.round(fs * 1.65);
+    var d = new Date(), ymd = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    var tmp = document.createElement('canvas').getContext('2d');
+    var fam = '"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif';
+    tmp.font = fs + 'px ' + fam;
+    var raw = [
+      {t:'家相オーバーレイ  ' + ymd, b:true},
+      {t:'区切り: ' + (S.split === '45' ? '八方位 各45度' : '九星気学式（東西南北30度・斜め60度）') +
+         ' / 北の基準: ' + (S.mode === 'mag' ? '磁北（偏角 西へ' + S.decl + '度）' : '真北') +
+         ' / 図面の北: ' + S.north + '度'},
+      {t:'家の中心の範囲: 図面の短い辺の' + S.centerPct + '%'}
+    ];
+    var warn = 0;
+    S.markers.forEach(function(m){
+      var z = zoneOf(m.x, m.y), w = isSansho(z); if (w) warn++;
+      raw.push({t:TYPES[m.type].label + ': ' + zoneLabel(z) + (w ? '（三所に該当）' : ''), warn:w});
+    });
+    raw.push({t:S.markers.length ? (warn ? '三所に三備が入っているもの: ' + warn + '件' : '三所に三備は入っていません。') : '設備は置かれていません。', b:true, warn:warn > 0});
+    if ($('incRef').checked) refLines().forEach(function(r){ raw.push(r); });
+    raw.push({t:'判定は「三所に三備を置かない」という一般的な説明だけです。流派によって判断は異なり、効果が科学的に実証されたものではありません。娯楽・参考用です。', small:true});
+    var lines = [];
+    raw.forEach(function(r){
+      tmp.font = (r.b ? '700 ' : '') + (r.small ? Math.round(fs * 0.85) : fs) + 'px ' + fam;
+      wrapText(tmp, r.t, EW - pad * 2).forEach(function(t){ lines.push({t:t, b:r.b, warn:r.warn, small:r.small}); });
+    });
+    var FH = pad * 2 + lh * lines.length;
+    var oc = document.createElement('canvas'); oc.width = EW; oc.height = EH + FH;
+    var g = oc.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, EW, EH + FH);
+    S.noHl = true; render(g, EW, EH, 1, 0, 0); S.noHl = false;
+    g.strokeStyle = '#d2dce4'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, EH + 1); g.lineTo(EW, EH + 1); g.stroke();
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    lines.forEach(function(ln, i){
+      var size = ln.small ? Math.round(fs * 0.85) : fs;
+      g.font = (ln.b ? '700 ' : '') + size + 'px ' + fam;
+      g.fillStyle = ln.warn ? '#b3321c' : (ln.small ? '#566673' : '#17212a');
+      g.fillText(ln.t, pad, EH + pad + i * lh + fs);
+    });
+    var shown = false;
+    try {
+      // 表示用はdata URL。blob:のURLを止める環境でも画像が出る。
+      $('prev').src = oc.toDataURL('image/png');
+      $('prevWrap').hidden = false; shown = true;
+      $('saveMsg').hidden = false;
+      $('saveMsg').textContent = '画像を作りました。ダウンロードが始まらないときは、下の画像を長押し（パソコンは右クリック）して保存してください。';
+      $('prevWrap').scrollIntoView({block:'nearest'});
+    } catch (ex){
+      err.textContent = '画像を作れませんでした。図面が大きすぎるかもしれません。小さい画像で試してください。'; err.hidden = false; return;
+    }
+    try {
+      oc.toBlob(function(blob){
+        if (!blob) return;
+        lastBlob = blob;
+        var canShare = false;
+        try {
+          canShare = !!(navigator.canShare && navigator.share &&
+            navigator.canShare({files:[new File([blob], 'kaso-overlay.png', {type:'image/png'})]}));
+        } catch (e2){ canShare = false; }
+        $('btnShare').hidden = !canShare;
+        try {
+          var url = URL.createObjectURL(blob);
+          if (prevUrl) URL.revokeObjectURL(prevUrl);
+          prevUrl = url;
+          var a = document.createElement('a'); a.href = url; a.download = 'kaso-overlay.png';
+          document.body.appendChild(a); a.click(); a.remove();
+        } catch (e3){ /* ダウンロードが使えない環境では、上の案内どおり画像を長押しで保存する */ }
+      }, 'image/png');
+    } catch (ex){ /* 表示済みなので続行 */ }
+  }
+  $('btnSave').addEventListener('click', exportPng);
+  $('btnShare').addEventListener('click', function(){
+    if (!lastBlob) return;
+    var f = new File([lastBlob], 'kaso-overlay.png', {type:'image/png'});
+    navigator.share({files:[f], title:'家相オーバーレイ'}).catch(function(){});
+  });
+
+  renderRef();
+  loadSample();
+})();
+</script>
+</body>
+</html>
